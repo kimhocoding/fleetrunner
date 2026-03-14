@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>Fleet Runner</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js"></script>
+<style>
+  :root {
+    --bg:#F5F4F0; --surface:#FFFFFF; --surface2:#EEEDE9; --border:#DDDBD4;
+    --text:#1A1917; --text2:#6B6960; --text3:#A09E97;
+    --accent-bg:#1A1917; --accent-text:#F5F4F0;
+    --blue-bg:#EFF6FF; --blue-text:#1D4ED8;
+    --radius:12px; --radius-sm:8px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+
+  .nav{background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100;}
+  .nav-inner{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;max-width:480px;margin:0 auto;}
+  .nav-title{font-family:'Space Mono',monospace;font-size:15px;font-weight:700;letter-spacing:-0.5px;}
+  .nav-tabs{display:flex;gap:4px;}
+  .nav-tab{padding:6px 12px;border-radius:20px;font-size:13px;font-weight:500;border:none;cursor:pointer;background:transparent;color:var(--text2);transition:all 0.15s;}
+  .nav-tab.active{background:var(--accent-bg);color:var(--accent-text);}
+
+  .page{display:none;max-width:480px;margin:0 auto;padding:16px;}
+  .page.active{display:block;}
+
+  /* SEARCH BAR */
+  .search-row{display:flex;gap:8px;margin-bottom:12px;align-items:center;}
+  .search-box{position:relative;flex:1;}
+  .search-box input{width:100%;padding:13px 40px 13px 44px;font-size:16px;font-family:'Noto Sans KR',sans-serif;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);outline:none;transition:border-color 0.15s;}
+  .search-box input:focus{border-color:var(--text);}
+  .search-box input::placeholder{color:var(--text3);}
+  .search-icon{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--text3);pointer-events:none;}
+  .clear-btn{position:absolute;right:10px;top:50%;transform:translateY(-50%);background:var(--surface2);border:none;border-radius:50%;width:24px;height:24px;display:none;align-items:center;justify-content:center;cursor:pointer;color:var(--text2);font-size:14px;}
+  .clear-btn.show{display:flex;}
+  .scan-icon-btn{flex-shrink:0;width:48px;height:48px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.15s;color:var(--text2);}
+  .scan-icon-btn:active{background:var(--surface2);}
+  .scan-icon-btn.active{background:var(--accent-bg);border-color:var(--accent-bg);color:var(--accent-text);}
+
+  /* INLINE SCANNER */
+  .inline-scanner{display:none;margin-bottom:12px;border-radius:var(--radius);overflow:hidden;position:relative;background:#000;aspect-ratio:4/3;}
+  .inline-scanner video{width:100%;height:100%;object-fit:cover;display:block;}
+  .scan-frame{position:absolute;top:50%;left:50%;transform:translate(-50%,-55%);width:200px;height:120px;border:2.5px solid rgba(255,255,255,0.85);border-radius:10px;box-shadow:0 0 0 9999px rgba(0,0,0,0.45);pointer-events:none;}
+  .scan-line{position:absolute;left:5px;right:5px;height:2px;background:#2563EB;border-radius:2px;animation:scanMove 1.8s ease-in-out infinite;}
+  @keyframes scanMove{0%,100%{top:10px}50%{top:calc(100% - 14px)}}
+  .scan-hint{position:absolute;bottom:10px;left:0;right:0;text-align:center;color:rgba(255,255,255,0.75);font-size:12px;}
+  .scan-banner{display:none;position:absolute;top:10px;left:50%;transform:translateX(-50%);background:#16A34A;color:#fff;padding:7px 18px;border-radius:20px;font-size:13px;font-weight:700;white-space:nowrap;}
+
+  /* FILTERS */
+  .filter-section{margin-bottom:10px;}
+  .filter-label-row{display:flex;align-items:center;gap:6px;margin-bottom:6px;}
+  .filter-label{font-size:11px;font-weight:700;color:var(--text3);letter-spacing:0.5px;text-transform:uppercase;}
+  .filter-row{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none;}
+  .filter-row::-webkit-scrollbar{display:none;}
+  .chip{flex-shrink:0;padding:6px 14px;border-radius:20px;font-size:13px;font-weight:500;border:1px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer;white-space:nowrap;transition:all 0.15s;}
+  .chip.active{background:var(--accent-bg);color:var(--accent-text);border-color:var(--accent-bg);}
+
+  /* RESULTS */
+  .result-count{font-size:12px;color:var(--text3);margin:10px 0 12px;font-family:'Space Mono',monospace;}
+  .brand-group{margin-bottom:22px;}
+  .brand-heading{display:flex;align-items:center;gap:8px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border);}
+  .brand-name-big{font-size:14px;font-weight:700;color:var(--text);}
+  .brand-count-badge{font-size:11px;color:var(--text3);font-family:'Space Mono',monospace;}
+  .item-list{display:flex;flex-direction:column;gap:8px;}
+  .item-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;display:flex;gap:14px;align-items:center;cursor:pointer;transition:all 0.15s;}
+  .item-card:active{transform:scale(0.98);}
+  .item-thumb{width:52px;height:52px;border-radius:var(--radius-sm);background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;overflow:hidden;}
+  .item-thumb img{width:100%;height:100%;object-fit:cover;}
+  .item-body{flex:1;min-width:0;}
+  .item-name{font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px;}
+  .item-meta{font-size:11px;color:var(--text3);font-family:'Space Mono',monospace;margin-bottom:8px;}
+  .item-chips{display:flex;gap:5px;flex-wrap:wrap;align-items:center;}
+  .rack-chip{background:var(--blue-bg);color:var(--blue-text);font-size:13px;font-weight:700;padding:3px 10px;border-radius:6px;font-family:'Space Mono',monospace;}
+  .tag-chip{background:var(--surface2);color:var(--text2);font-size:11px;padding:3px 8px;border-radius:6px;}
+  .empty-state{text-align:center;padding:60px 20px;}
+  .empty-state .icon{font-size:48px;margin-bottom:12px;}
+  .empty-state p{color:var(--text3);font-size:15px;}
+
+  /* DETAIL SHEET */
+  .sheet-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:200;opacity:0;pointer-events:none;transition:opacity 0.25s;}
+  .sheet-overlay.open{opacity:1;pointer-events:all;}
+  .sheet{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-radius:20px 20px 0 0;padding:20px;max-width:480px;margin:0 auto;transform:translateY(100%);transition:transform 0.3s cubic-bezier(0.32,0.72,0,1);max-height:92vh;overflow-y:auto;}
+  .sheet.open{transform:translateY(0);}
+  .sheet-handle{width:36px;height:4px;background:var(--border);border-radius:4px;margin:0 auto 20px;}
+  .sheet-header{display:flex;gap:16px;align-items:center;margin-bottom:20px;}
+  .sheet-img{width:72px;height:72px;border-radius:var(--radius);background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:38px;flex-shrink:0;overflow:hidden;}
+  .sheet-img img{width:100%;height:100%;object-fit:cover;}
+  .sheet-name{font-size:20px;font-weight:700;margin-bottom:4px;}
+  .sheet-sub{font-size:13px;color:var(--text3);}
+  .rack-big{background:var(--blue-bg);border-radius:var(--radius);padding:18px 20px;margin-bottom:16px;}
+  .rack-big-label{font-size:11px;color:var(--blue-text);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;}
+  .rack-big-value{font-size:36px;font-weight:700;color:var(--blue-text);font-family:'Space Mono',monospace;letter-spacing:2px;}
+  .detail-rows{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
+  .detail-row{display:flex;justify-content:space-between;align-items:center;padding:13px 16px;border-bottom:1px solid var(--border);}
+  .detail-row:last-child{border-bottom:none;}
+  .detail-row .lbl{font-size:13px;color:var(--text2);}
+  .detail-row .val{font-size:14px;font-weight:500;}
+  .sheet-close{width:100%;margin-top:16px;padding:14px;border-radius:var(--radius);border:1px solid var(--border);background:var(--surface2);font-size:15px;font-family:'Noto Sans KR',sans-serif;color:var(--text);cursor:pointer;font-weight:500;}
+
+  /* ADMIN */
+  .admin-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;}
+  .admin-title{font-size:18px;font-weight:700;}
+  .add-btn{background:var(--accent-bg);color:var(--accent-text);border:none;border-radius:var(--radius-sm);padding:9px 16px;font-size:14px;font-family:'Noto Sans KR',sans-serif;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;}
+  .admin-list{display:flex;flex-direction:column;gap:8px;}
+  .admin-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;display:flex;align-items:center;gap:12px;}
+  .admin-thumb{width:40px;height:40px;border-radius:var(--radius-sm);background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;overflow:hidden;}
+  .admin-thumb img{width:100%;height:100%;object-fit:cover;}
+  .admin-info{flex:1;min-width:0;}
+  .admin-name{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .admin-sub{font-size:11px;color:var(--text3);font-family:'Space Mono',monospace;}
+  .admin-actions{display:flex;gap:6px;flex-shrink:0;}
+  .edit-btn,.del-btn{border:1px solid var(--border);border-radius:var(--radius-sm);width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;background:transparent;}
+  .del-btn{color:#DC2626;}
+  .section-label{font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin:24px 0 10px;}
+  .action-btn{width:100%;padding:13px;border-radius:var(--radius);border:1px solid var(--border);background:var(--surface);font-size:14px;font-family:'Noto Sans KR',sans-serif;color:var(--text);cursor:pointer;font-weight:500;display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+  .hint{font-size:12px;color:var(--text3);line-height:1.6;}
+  .stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;}
+  .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;}
+  .stat-val{font-size:28px;font-weight:700;font-family:'Space Mono',monospace;margin-bottom:2px;}
+  .stat-label{font-size:12px;color:var(--text2);}
+
+  /* FORM */
+  .form-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:300;display:none;align-items:flex-end;justify-content:center;}
+  .form-overlay.open{display:flex;}
+  .form-sheet{background:var(--surface);border-radius:20px 20px 0 0;padding:20px;width:100%;max-width:480px;max-height:95vh;overflow-y:auto;}
+  .form-handle{width:36px;height:4px;background:var(--border);border-radius:4px;margin:0 auto 16px;}
+  .form-title{font-size:17px;font-weight:700;margin-bottom:20px;}
+  .form-group{margin-bottom:14px;}
+  .form-label{font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;display:block;}
+  .form-input{width:100%;padding:11px 14px;font-size:15px;font-family:'Noto Sans KR',sans-serif;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);outline:none;transition:border-color 0.15s;}
+  .form-input:focus{border-color:var(--text);}
+  .form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .form-actions{display:flex;gap:10px;margin-top:20px;padding-bottom:env(safe-area-inset-bottom,8px);}
+  .btn-cancel{flex:1;padding:13px;border-radius:var(--radius);border:1px solid var(--border);background:var(--surface2);font-size:15px;font-family:'Noto Sans KR',sans-serif;cursor:pointer;font-weight:500;color:var(--text);}
+  .btn-save{flex:2;padding:13px;border-radius:var(--radius);border:none;background:var(--accent-bg);color:var(--accent-text);font-size:15px;font-family:'Noto Sans KR',sans-serif;cursor:pointer;font-weight:700;}
+  .photo-area{width:100%;height:150px;border:2px dashed var(--border);border-radius:var(--radius);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;position:relative;overflow:hidden;gap:6px;background:var(--surface2);}
+  .photo-area img.preview{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
+  .photo-placeholder{display:flex;flex-direction:column;align-items:center;gap:6px;z-index:1;}
+  .pico{font-size:30px;} .ptxt{font-size:13px;color:var(--text3);}
+  .photo-del-btn{position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.55);color:#fff;border:none;border-radius:50%;width:28px;height:28px;font-size:13px;cursor:pointer;z-index:2;display:none;align-items:center;justify-content:center;}
+  .input-with-scan{display:flex;gap:8px;}
+  .input-with-scan .form-input{flex:1;min-width:0;}
+  .form-scan-btn{padding:0 14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .cat-select-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:4px;}
+  .cat-opt{padding:9px 4px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:var(--surface2);display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;transition:all 0.1s;font-size:20px;}
+  .cat-opt span.clabel{font-size:11px;color:var(--text2);font-family:'Noto Sans KR',sans-serif;font-weight:500;}
+  .cat-opt.sel{border-color:var(--text);background:var(--surface);}
+  .emoji-opt{width:100%;border-radius:var(--radius-sm);border:1.5px solid transparent;background:var(--surface2);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:22px;cursor:pointer;transition:all 0.1s;padding:8px 4px 6px;}
+  .emoji-opt span.elabel{font-size:10px;color:var(--text2);margin-top:4px;font-family:'Noto Sans KR',sans-serif;font-weight:500;}
+  .emoji-opt.sel{border-color:var(--text);background:var(--surface);}
+
+  /* FULLSCREEN SCANNER */
+  .scanner-overlay{position:fixed;inset:0;background:#000;z-index:500;display:none;flex-direction:column;}
+  .scanner-overlay.open{display:flex;}
+  .scanner-top{display:flex;align-items:center;justify-content:space-between;padding:16px 16px 12px;}
+  .scanner-ttl{color:#fff;font-size:16px;font-weight:700;}
+  .scanner-x{color:#fff;background:rgba(255,255,255,0.15);border:none;border-radius:50%;width:36px;height:36px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+  .scanner-wrap{position:relative;flex:1;overflow:hidden;}
+  #scanVideo{width:100%;height:100%;object-fit:cover;}
+  .scan-frame-box{position:absolute;top:50%;left:50%;transform:translate(-50%,-60%);width:240px;height:150px;border:3px solid rgba(255,255,255,0.9);border-radius:12px;box-shadow:0 0 0 9999px rgba(0,0,0,0.5);pointer-events:none;}
+  .scan-line2{position:absolute;left:6px;right:6px;height:2px;background:#2563EB;border-radius:2px;animation:scanMove 1.8s ease-in-out infinite;}
+  .scan-hint-txt{color:rgba(255,255,255,0.7);text-align:center;padding:16px;font-size:13px;}
+  .scan-ok-banner{position:absolute;bottom:30px;left:50%;transform:translateX(-50%);background:#16A34A;color:#fff;padding:10px 22px;border-radius:24px;font-size:14px;font-weight:700;display:none;white-space:nowrap;}
+
+  .toast{position:fixed;bottom:32px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--text);color:var(--surface);padding:10px 18px;border-radius:20px;font-size:14px;opacity:0;transition:all 0.25s;pointer-events:none;white-space:nowrap;z-index:999;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <div class="nav-title">Fleet Runner</div>
+    <div class="nav-tabs">
+      <button class="nav-tab active" onclick="switchPage('search',this)">검색</button>
+      <button class="nav-tab" onclick="switchPage('admin',this)">관리</button>
+    </div>
+  </div>
+</nav>
+
+<!-- SEARCH PAGE -->
+<div class="page active" id="page-search">
+  <div class="search-row">
+    <div class="search-box">
+      <svg class="search-icon" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <input type="text" id="searchInput" placeholder="이름, 코드, 브랜드, 렉..." oninput="onSearch()" />
+      <button class="clear-btn" id="clearBtn" onclick="clearSearch()">✕</button>
+    </div>
+    <button class="scan-icon-btn" id="searchScanBtn" onclick="toggleSearchScanner()" title="바코드/QR로 검색">
+      <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+        <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/>
+        <line x1="7" y1="8" x2="7" y2="16"/><line x1="10" y1="8" x2="10" y2="16"/>
+        <line x1="13" y1="8" x2="13" y2="12"/><line x1="16" y1="8" x2="16" y2="16"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="inline-scanner" id="searchScannerBox">
+    <video id="searchScanVideo" autoplay playsinline muted></video>
+    <div class="scan-frame"><div class="scan-line"></div></div>
+    <div class="scan-hint">바코드 또는 QR코드를 네모 안에 맞춰주세요</div>
+    <div class="scan-banner" id="searchScanBanner"></div>
+  </div>
+
+  <!-- 브랜드 필터 -->
+  <div class="filter-section">
+    <div class="filter-label-row"><span class="filter-label">브랜드</span></div>
+    <div class="filter-row" id="brandFilterRow"></div>
+  </div>
+  <!-- 카테고리 필터 -->
+  <div class="filter-section">
+    <div class="filter-label-row"><span class="filter-label">카테고리</span></div>
+    <div class="filter-row" id="catFilterRow"></div>
+  </div>
+
+  <div class="result-count" id="resultCount"></div>
+  <div id="itemList"></div>
+</div>
+
+<!-- ADMIN PAGE -->
+<div class="page" id="page-admin">
+  <div class="stats-grid" id="statsGrid"></div>
+  <div class="admin-header">
+    <div class="admin-title">의류 목록</div>
+    <button class="add-btn" onclick="openForm(null)">
+      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>추가
+    </button>
+  </div>
+  <div class="admin-list" id="adminList"></div>
+  <div class="section-label">데이터 관리</div>
+  <button class="action-btn" onclick="exportData()">
+    <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M12 15V3m0 12-4-4m4 4 4-4M2 17l.621 2.485A2 2 0 0 0 4.561 21h14.878a2 2 0 0 0 1.94-1.515L22 17"/></svg>
+    JSON으로 내보내기 (백업)
+  </button>
+  <button class="action-btn" onclick="document.getElementById('importFile').click()">
+    <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0-12 4 4m-4-4L8 7M2 17l.621 2.485A2 2 0 0 0 4.561 21h14.878a2 2 0 0 0 1.94-1.515L22 17"/></svg>
+    JSON 파일 불러오기 (복원)
+  </button>
+  <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)" />
+  <p class="hint">JSON으로 백업해두면 기기를 바꿔도 데이터를 복원할 수 있어요.</p>
+  <div class="section-label">초기화</div>
+  <button class="action-btn" onclick="resetData()" style="color:#DC2626">
+    <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
+    전체 데이터 삭제
+  </button>
+</div>
+
+<!-- DETAIL SHEET -->
+<div class="sheet-overlay" id="sheetOverlay" onclick="closeSheet()"></div>
+<div class="sheet" id="detailSheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header">
+    <div class="sheet-img" id="sImg"></div>
+    <div><div class="sheet-name" id="sName"></div><div class="sheet-sub" id="sSub"></div></div>
+  </div>
+  <div class="rack-big">
+    <div class="rack-big-label">렉 위치</div>
+    <div class="rack-big-value" id="sRack"></div>
+  </div>
+  <div class="detail-rows" id="sRows"></div>
+  <button class="sheet-close" onclick="closeSheet()">닫기</button>
+</div>
+
+<!-- FORM -->
+<div class="form-overlay" id="formOverlay">
+  <div class="form-sheet">
+    <div class="form-handle"></div>
+    <div class="form-title" id="formTitle">의류 추가</div>
+    <div class="form-group">
+      <label class="form-label">📷 의류 사진</label>
+      <div class="photo-area" id="photoArea" onclick="triggerPhoto()">
+        <div class="photo-placeholder" id="photoPlaceholder"><span class="pico">📷</span><span class="ptxt">탭해서 사진 촬영 또는 앨범에서 선택</span></div>
+        <button class="photo-del-btn" id="photoDelBtn" onclick="delPhoto(event)">✕</button>
+      </div>
+      <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none" onchange="onPhotoSelected(event)" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">카테고리</label>
+      <div class="cat-select-grid" id="catSelectGrid"></div>
+      <input type="hidden" id="fCat" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">의류 이름 *</label>
+      <input class="form-input" id="fName" placeholder="예: 울 롱 코트" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">바코드 / 상품 코드</label>
+      <div class="input-with-scan">
+        <input class="form-input" id="fCode" placeholder="직접 입력 또는 스캔" />
+        <button class="form-scan-btn" onclick="openScanner()">
+          <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+            <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/>
+            <line x1="7" y1="8" x2="7" y2="16"/><line x1="10" y1="8" x2="10" y2="16"/>
+            <line x1="13" y1="8" x2="13" y2="12"/><line x1="16" y1="8" x2="16" y2="16"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">렉 위치 *</label>
+      <input class="form-input" id="fRack" placeholder="예: A-2-3" />
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">브랜드</label>
+        <input class="form-input" id="fBrand" placeholder="예: Nike" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">컬러</label>
+        <input class="form-input" id="fColor" placeholder="블랙" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">사이즈</label>
+        <input class="form-input" id="fSize" placeholder="S/M/L" />
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">메모</label>
+      <input class="form-input" id="fNote" placeholder="추가 메모 (선택)" />
+    </div>
+    <div class="form-actions">
+      <button class="btn-cancel" onclick="closeForm()">취소</button>
+      <button class="btn-save" onclick="saveItem()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- FULLSCREEN SCANNER (폼용) -->
+<div class="scanner-overlay" id="scannerOverlay">
+  <div class="scanner-top">
+    <span class="scanner-ttl">바코드 / QR 스캔</span>
+    <button class="scanner-x" onclick="closeScanner()">✕</button>
+  </div>
+  <div class="scanner-wrap">
+    <video id="scanVideo" autoplay playsinline muted></video>
+    <div class="scan-frame-box"><div class="scan-line2"></div></div>
+    <div class="scan-ok-banner" id="scanOkBanner"></div>
+  </div>
+  <div class="scan-hint-txt">바코드나 QR코드를 네모 안에 맞춰주세요</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const EMOJIS=['👕','👖','🧢','🧦','👜','📦'];
+const EMOJI_LABELS=['상의','하의','모자','양말','가방','기타'];
+const CATS=['상의','하의','모자','양말','가방','기타'];
+const CAT_ICONS=['👕','👖','🧢','🧦','👜','📦'];
+let selCat='상의';
+const KEY='wardrobe_v4';
+let items=[],editId=null,selEmoji='🧥',curPhoto=null;
+let activeBrand='all',activeCat='all';
+let codeReader=null,scanStream=null,searchScanReader=null,searchScanStream=null;
+
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2);}
+function load(){try{items=JSON.parse(localStorage.getItem(KEY))||[];}catch{items=[];}if(!items.length){items=sample();save();}}
+function save(){localStorage.setItem(KEY,JSON.stringify(items));}
+function sample(){
+  return[
+    {id:uid(),emoji:'👕',photo:null,name:'울 롱 코트',code:'CT-001',rack:'A-2-3',brand:'Moncler',cat:'상의',color:'차콜',size:'S/M/L',note:''},
+    {id:uid(),emoji:'👖',photo:null,name:'플리츠 미디 스커트',code:'SK-015',rack:'B-1-4',brand:'Zara',cat:'하의',color:'베이지',size:'S/M/L',note:''},
+    {id:uid(),emoji:'👖',photo:null,name:'슬림 테이퍼드 팬츠',code:'PT-032',rack:'C-3-1',brand:'Uniqlo',cat:'하의',color:'네이비',size:'26~32',note:''},
+    {id:uid(),emoji:'👕',photo:null,name:'오버사이즈 셔츠',code:'SH-008',rack:'A-4-2',brand:'Zara',cat:'상의',color:'화이트',size:'S/M/L/XL',note:''},
+    {id:uid(),emoji:'👜',photo:null,name:'캐시미어 머플러',code:'AC-005',rack:'D-1-1',brand:'Moncler',cat:'가방',color:'카멜',size:'FREE',note:'베스트셀러'},
+    {id:uid(),emoji:'👕',photo:null,name:'케이블 니트 스웨터',code:'KN-019',rack:'B-3-3',brand:'Uniqlo',cat:'상의',color:'크림',size:'S/M/L',note:''},
+    {id:uid(),emoji:'📦',photo:null,name:'첼시 부츠',code:'SH-044',rack:'E-1-2',brand:'Dr.Martens',cat:'기타',color:'브라운',size:'235~270',note:''},
+    {id:uid(),emoji:'📦',photo:null,name:'러닝 스니커즈',code:'SN-022',rack:'E-2-1',brand:'Nike',cat:'기타',color:'화이트',size:'240~280',note:''},
+    {id:uid(),emoji:'🧢',photo:null,name:'울 버킷햇',code:'HT-003',rack:'D-2-1',brand:'Nike',cat:'모자',color:'블랙',size:'FREE',note:''},
+  ];
+}
+
+function switchPage(p,btn){
+  document.querySelectorAll('.page').forEach(e=>e.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(e=>e.classList.remove('active'));
+  document.getElementById('page-'+p).classList.add('active');
+  btn.classList.add('active');
+  if(p==='admin')renderAdmin();
+  if(p==='search')renderSearch();
+}
+
+/* SEARCH */
+function onSearch(){
+  document.getElementById('clearBtn').classList.toggle('show',document.getElementById('searchInput').value.length>0);
+  renderSearch();
+}
+function clearSearch(){
+  document.getElementById('searchInput').value='';
+  document.getElementById('clearBtn').classList.remove('show');
+  renderSearch();
+}
+function setBrand(b){activeBrand=b;renderSearch();}
+function setCat(c){activeCat=c;renderSearch();}
+
+function renderSearch(){
+  const brands=[...new Set(items.map(i=>i.brand).filter(Boolean))].sort();
+  const cats=[...new Set(items.map(i=>i.cat).filter(Boolean))].sort();
+
+  document.getElementById('brandFilterRow').innerHTML=
+    `<button class="chip ${activeBrand==='all'?'active':''}" onclick="setBrand('all')">전체</button>`+
+    brands.map(b=>`<button class="chip ${activeBrand===b?'active':''}" onclick="setBrand('${escQ(b)}')">${b}</button>`).join('');
+
+  document.getElementById('catFilterRow').innerHTML=
+    `<button class="chip ${activeCat==='all'?'active':''}" onclick="setCat('all')">전체</button>`+
+    cats.map(c=>`<button class="chip ${activeCat===c?'active':''}" onclick="setCat('${escQ(c)}')">${c}</button>`).join('');
+
+  const q=document.getElementById('searchInput').value.trim().toLowerCase();
+  let f=[...items];
+  if(activeBrand!=='all') f=f.filter(i=>i.brand===activeBrand);
+  if(activeCat!=='all') f=f.filter(i=>i.cat===activeCat);
+  if(q) f=f.filter(i=>[i.name,i.code,i.rack,i.color,i.brand,i.cat].some(v=>(v||'').toLowerCase().includes(q)));
+
+  document.getElementById('resultCount').textContent=`${f.length}개 상품`;
+  const el=document.getElementById('itemList');
+  if(!f.length){el.innerHTML=`<div class="empty-state"><div class="icon">🔍</div><p>검색 결과가 없어요</p></div>`;return;}
+
+  // 검색어 없고 브랜드 전체일 때: 브랜드별 그룹핑
+  if(activeBrand==='all'&&!q){
+    const grouped={};
+    f.forEach(item=>{const b=item.brand||'브랜드 미지정';if(!grouped[b])grouped[b]=[];grouped[b].push(item);});
+    const sortedBrands=Object.keys(grouped).sort();
+    el.innerHTML=sortedBrands.map(b=>`
+      <div class="brand-group">
+        <div class="brand-heading">
+          <span class="brand-name-big">${b}</span>
+          <span class="brand-count-badge">${grouped[b].length}개</span>
+        </div>
+        <div class="item-list">${grouped[b].map(itemCardHTML).join('')}</div>
+      </div>`).join('');
+  } else {
+    el.innerHTML=`<div class="item-list">${f.map(itemCardHTML).join('')}</div>`;
+  }
+}
+
+function itemCardHTML(item){
+  const thumb=item.photo?`<div class="item-thumb"><img src="${item.photo}"/></div>`:`<div class="item-thumb">${item.emoji}</div>`;
+  return`<div class="item-card" onclick="showDetail('${item.id}')">
+    ${thumb}
+    <div class="item-body">
+      <div class="item-name">${item.name}</div>
+      <div class="item-meta">${item.code||'코드 없음'}</div>
+      <div class="item-chips">
+        <span class="rack-chip">${item.rack||'-'}</span>
+        ${item.brand?`<span class="tag-chip">${item.brand}</span>`:''}
+        ${item.cat?`<span class="tag-chip">${item.cat}</span>`:''}
+      </div>
+    </div>
+  </div>`;
+}
+
+function escQ(s){return s.replace(/'/g,"\\'");}
+
+/* DETAIL */
+function showDetail(id){
+  const item=items.find(i=>i.id===id);if(!item)return;
+  const si=document.getElementById('sImg');
+  if(item.photo){si.innerHTML=`<img src="${item.photo}"/>`;si.style.fontSize='';}
+  else{si.innerHTML=item.emoji;si.style.fontSize='38px';}
+  document.getElementById('sName').textContent=item.name;
+  document.getElementById('sSub').textContent=[item.brand,item.cat].filter(Boolean).join(' · ');
+  document.getElementById('sRack').textContent=item.rack||'-';
+  document.getElementById('sRows').innerHTML=[
+    item.code?`<div class="detail-row"><span class="lbl">상품 코드</span><span class="val" style="font-family:'Space Mono',monospace;font-size:13px">${item.code}</span></div>`:'',
+    item.color?`<div class="detail-row"><span class="lbl">컬러</span><span class="val">${item.color}</span></div>`:'',
+    item.size?`<div class="detail-row"><span class="lbl">사이즈</span><span class="val">${item.size}</span></div>`:'',
+    item.note?`<div class="detail-row"><span class="lbl">메모</span><span class="val" style="color:var(--text2);font-style:italic">${item.note}</span></div>`:'',
+  ].join('');
+  document.getElementById('sheetOverlay').classList.add('open');
+  document.getElementById('detailSheet').classList.add('open');
+}
+function closeSheet(){
+  document.getElementById('sheetOverlay').classList.remove('open');
+  document.getElementById('detailSheet').classList.remove('open');
+}
+
+/* ADMIN */
+function renderAdmin(){
+  const total=items.length;
+  const brands=[...new Set(items.map(i=>i.brand).filter(Boolean))].length;
+  const cats=[...new Set(items.map(i=>i.cat).filter(Boolean))].length;
+  const noRack=items.filter(i=>!i.rack).length;
+  document.getElementById('statsGrid').innerHTML=`
+    <div class="stat-card"><div class="stat-val">${total}</div><div class="stat-label">총 의류 종류</div></div>
+    <div class="stat-card"><div class="stat-val">${brands}</div><div class="stat-label">등록된 브랜드</div></div>
+    <div class="stat-card"><div class="stat-val">${cats}</div><div class="stat-label">카테고리 수</div></div>
+    <div class="stat-card"><div class="stat-val" style="color:${noRack?'#DC2626':'inherit'}">${noRack}</div><div class="stat-label">위치 미등록</div></div>`;
+  document.getElementById('adminList').innerHTML=items.map(item=>{
+    const thumb=item.photo?`<div class="admin-thumb"><img src="${item.photo}"/></div>`:`<div class="admin-thumb">${item.emoji}</div>`;
+    return`<div class="admin-card">${thumb}<div class="admin-info"><div class="admin-name">${item.name}</div><div class="admin-sub">${item.brand||'브랜드 없음'} · ${item.rack||'위치 없음'}</div></div><div class="admin-actions"><button class="edit-btn" onclick="openForm('${item.id}')">✏️</button><button class="del-btn" onclick="deleteItem('${item.id}')">🗑</button></div></div>`;
+  }).join('')||`<div class="empty-state"><div class="icon">📦</div><p>아직 등록된 의류가 없어요</p></div>`;
+}
+
+/* FORM */
+function openForm(id){
+  editId=id||null;
+  const item=editId?items.find(i=>i.id===editId):null;
+  document.getElementById('formTitle').textContent=editId?'의류 수정':'의류 추가';
+  selEmoji=item?.emoji||'👕';
+  selCat=item?.cat||'상의';
+  curPhoto=item?.photo||null;
+  document.getElementById('fName').value=item?.name||'';
+  document.getElementById('fCode').value=item?.code||'';
+  document.getElementById('fRack').value=item?.rack||'';
+  document.getElementById('fBrand').value=item?.brand||'';
+  document.getElementById('fCat').value=item?.cat||'';
+  document.getElementById('fColor').value=item?.color||'';
+  document.getElementById('fSize').value=item?.size||'';
+  document.getElementById('fNote').value=item?.note||'';
+  refreshPhotoArea();renderCatGrid();
+  document.getElementById('formOverlay').classList.add('open');
+}
+function closeForm(){document.getElementById('formOverlay').classList.remove('open');}
+function renderCatGrid(){
+  document.getElementById('catSelectGrid').innerHTML=CATS.map((c,i)=>`<div class="cat-opt ${c===selCat?'sel':''}" onclick="selectCat('${c}')">${CAT_ICONS[i]}<span class="clabel">${c}</span></div>`).join('');
+}
+function selectCat(c){
+  selCat=c;
+  selEmoji=CAT_ICONS[CATS.indexOf(c)]||'📦';
+  document.getElementById('fCat').value=c;
+  renderCatGrid();
+}
+function saveItem(){
+  const name=document.getElementById('fName').value.trim();
+  const rack=document.getElementById('fRack').value.trim();
+  if(!name||!rack){showToast('이름과 렉 위치는 필수예요!');return;}
+  const data={id:editId||uid(),emoji:selEmoji,photo:curPhoto,name,
+    code:document.getElementById('fCode').value.trim(),rack,
+    brand:document.getElementById('fBrand').value.trim(),
+    cat:selCat,
+    color:document.getElementById('fColor').value.trim(),
+    size:document.getElementById('fSize').value.trim(),
+    note:document.getElementById('fNote').value.trim()};
+  if(editId){const i=items.findIndex(x=>x.id===editId);items[i]=data;}else items.push(data);
+  save();closeForm();renderAdmin();renderSearch();
+  showToast(editId?'수정되었어요!':'추가되었어요!');
+}
+function deleteItem(id){
+  if(!confirm('이 항목을 삭제할까요?'))return;
+  items=items.filter(i=>i.id!==id);save();renderAdmin();showToast('삭제되었어요');
+}
+function resetData(){
+  if(!confirm('전체 데이터를 삭제할까요?'))return;
+  items=[];save();renderAdmin();showToast('초기화되었어요');
+}
+
+/* PHOTO */
+function triggerPhoto(){document.getElementById('photoInput').click();}
+function onPhotoSelected(e){
+  const file=e.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    const img=new Image();
+    img.onload=()=>{
+      const MAX=640;let w=img.width,h=img.height;
+      if(w>MAX||h>MAX){const r=Math.min(MAX/w,MAX/h);w=Math.round(w*r);h=Math.round(h*r);}
+      const c=document.createElement('canvas');c.width=w;c.height=h;
+      c.getContext('2d').drawImage(img,0,0,w,h);
+      curPhoto=c.toDataURL('image/jpeg',0.82);refreshPhotoArea();
+    };img.src=ev.target.result;
+  };reader.readAsDataURL(file);e.target.value='';
+}
+function refreshPhotoArea(){
+  const area=document.getElementById('photoArea');
+  const ph=document.getElementById('photoPlaceholder');
+  const del=document.getElementById('photoDelBtn');
+  let prev=area.querySelector('img.preview');
+  if(curPhoto){ph.style.display='none';del.style.display='flex';if(!prev){prev=document.createElement('img');prev.className='preview';area.appendChild(prev);}prev.src=curPhoto;}
+  else{ph.style.display='flex';del.style.display='none';if(prev)prev.remove();}
+}
+function delPhoto(e){e.stopPropagation();curPhoto=null;refreshPhotoArea();}
+
+/* SEARCH SCANNER */
+async function toggleSearchScanner(){
+  const box=document.getElementById('searchScannerBox');
+  const btn=document.getElementById('searchScanBtn');
+  if(box.style.display!=='none'){stopSearchScanner();return;}
+  if(typeof ZXing==='undefined'){showToast('스캐너 로딩 중... 잠시 후 다시 탭해주세요');return;}
+  box.style.display='block';btn.classList.add('active');
+  try{
+    searchScanStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}}});
+    document.getElementById('searchScanVideo').srcObject=searchScanStream;
+    searchScanReader=new ZXing.BrowserMultiFormatReader();
+    searchScanReader.decodeFromStream(searchScanStream,document.getElementById('searchScanVideo'),(result)=>{
+      if(result){
+        const code=result.getText();
+        const banner=document.getElementById('searchScanBanner');
+        banner.textContent='✓ '+code;banner.style.display='block';
+        setTimeout(()=>{
+          banner.style.display='none';stopSearchScanner();
+          document.getElementById('searchInput').value=code;
+          document.getElementById('clearBtn').classList.add('show');
+          renderSearch();
+          const matched=items.filter(i=>(i.code||'').toLowerCase()===code.toLowerCase());
+          if(matched.length===1)setTimeout(()=>showDetail(matched[0].id),300);
+        },900);
+      }
+    });
+  }catch{stopSearchScanner();showToast('카메라 권한이 필요해요.');}
+}
+function stopSearchScanner(){
+  document.getElementById('searchScannerBox').style.display='none';
+  document.getElementById('searchScanBtn').classList.remove('active');
+  if(searchScanReader){try{searchScanReader.reset();}catch{}searchScanReader=null;}
+  if(searchScanStream){searchScanStream.getTracks().forEach(t=>t.stop());searchScanStream=null;}
+}
+
+/* FORM SCANNER */
+async function openScanner(){
+  if(typeof ZXing==='undefined'){showToast('스캐너 로딩 중... 잠시 후 다시 탭해주세요');return;}
+  document.getElementById('scannerOverlay').classList.add('open');
+  try{
+    scanStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}}});
+    document.getElementById('scanVideo').srcObject=scanStream;
+    codeReader=new ZXing.BrowserMultiFormatReader();
+    codeReader.decodeFromStream(scanStream,document.getElementById('scanVideo'),(result)=>{
+      if(result){
+        const code=result.getText();
+        document.getElementById('fCode').value=code;
+        const b=document.getElementById('scanOkBanner');
+        b.textContent='✓ '+code;b.style.display='block';
+        setTimeout(()=>{b.style.display='none';closeScanner();},1100);
+      }
+    });
+  }catch{closeScanner();showToast('카메라 권한이 필요해요.');}
+}
+function closeScanner(){
+  document.getElementById('scannerOverlay').classList.remove('open');
+  if(codeReader){try{codeReader.reset();}catch{}codeReader=null;}
+  if(scanStream){scanStream.getTracks().forEach(t=>t.stop());scanStream=null;}
+}
+
+/* IMPORT / EXPORT */
+function exportData(){
+  const blob=new Blob([JSON.stringify(items,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download=`wardrobe_backup_${new Date().toISOString().slice(0,10)}.json`;a.click();
+  showToast('백업 파일이 저장되었어요!');
+}
+function importData(e){
+  const file=e.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    try{
+      const data=JSON.parse(ev.target.result);
+      if(!Array.isArray(data))throw new Error();
+      if(!confirm(`${data.length}개 항목을 불러올까요?`))return;
+      items=data;save();renderAdmin();showToast(`${data.length}개 항목을 불러왔어요!`);
+    }catch{showToast('올바른 JSON 파일이 아니에요');}
+  };reader.readAsText(file);e.target.value='';
+}
+
+function showToast(msg){
+  const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2200);
+}
+
+load();renderSearch();
+</script>
+</body>
+</html>
